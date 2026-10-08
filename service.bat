@@ -878,24 +878,35 @@ chcp 437 > nul
 cls
 
 set "listFile=%~dp0lists\ipset-all.txt"
+set "tempFile=%listFile%.tmp"
 set "url=https://raw.githubusercontent.com/Flowseal/zapret-discord-youtube/refs/heads/main/.service/ipset-service.txt"
 
 echo Updating ipset-all...
+if exist "%tempFile%" del /f /q "%tempFile%" > nul 2>&1
 
 if exist "%SystemRoot%\System32\curl.exe" (
-    curl -L -o "%listFile%" "%url%"
+    curl -fL -o "%tempFile%" "%url%"
 ) else (
     powershell -NoProfile -Command ^
         "$url = '%url%';" ^
-        "$out = '%listFile%';" ^
-        "$dir = Split-Path -Parent $out;" ^
-        "if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir | Out-Null };" ^
-        "$res = Invoke-WebRequest -Uri $url -TimeoutSec 10 -UseBasicParsing;" ^
-        "if ($res.StatusCode -eq 200) { $res.Content | Out-File -FilePath $out -Encoding UTF8 } else { exit 1 }"
+        "$out = '%tempFile%';" ^
+        "try { $res = Invoke-WebRequest -Uri $url -TimeoutSec 10 -UseBasicParsing; if ($res.StatusCode -ne 200) { exit 1 }; $res.Content | Out-File -FilePath $out -Encoding UTF8 } catch { exit 1 }"
 )
+
+if errorlevel 1 goto ipset_update_failed
+if not exist "%tempFile%" goto ipset_update_failed
+for %%F in ("%tempFile%") do if %%~zF LEQ 0 goto ipset_update_failed
+move /y "%tempFile%" "%listFile%" > nul
+if errorlevel 1 goto ipset_update_failed
 
 echo Finished
 
+pause
+goto menu
+
+:ipset_update_failed
+if exist "%tempFile%" del /f /q "%tempFile%" > nul 2>&1
+echo Update failed. The existing IP set was kept.
 pause
 goto menu
 
